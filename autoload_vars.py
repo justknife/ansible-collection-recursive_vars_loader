@@ -2,30 +2,32 @@ from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
 import os
-from ansible.plugins.callback import CallbackBase
+from ansible.plugins.action import ActionBase
+from ansible.errors import AnsibleFileNotFound
 
-class CallbackModule(CallbackBase):
-    CALLBACK_VERSION = 2.0
-    CALLBACK_TYPE = 'aggregate'
-    CALLBACK_NAME = 'autoload_vars'
+class ActionModule(ActionBase):
+    def run(self, tmp=None, task_vars=None):
+        result = super(ActionModule, self).run(tmp, task_vars)
 
-    def on_play_start(self, play):
-        playbook_dir = play._variable_manager._loader.get_basedir()
-        loader = play._variable_manager._loader
-        vars_manager = play._variable_manager
+        base_dir = os.path.abspath(task_vars.get('playbook_dir', '.'))
+        loaded = []
+        combined_vars = {}
 
-        levels_up = 3
-        loaded_paths = []
+        for level in range(4):  # от 0 до 3 уровней вверх
+            path = os.path.join(base_dir, *(['..'] * level), 'group_vars', 'all.yaml')
+            path = os.path.abspath(path)
 
-        for level in range(levels_up + 1):
-            gv_path = os.path.abspath(
-                os.path.join(playbook_dir, *(['..'] * level), 'group_vars', 'all.yaml')
-            )
-            if os.path.exists(gv_path):
-                self._display.display(f"AUTOLOAD: including vars from {gv_path}")
-                data = loader.load_from_file(gv_path)
-                vars_manager.extra_vars.update(data)
-                loaded_paths.append(gv_path)
+            if os.path.exists(path):
+                self._display.display(f"Loading vars from: {path}")
+                try:
+                    data = self._loader.load_from_file(path)
+                    combined_vars.update(data)
+                    loaded.append(path)
+                except Exception as e:
+                    raise AnsibleFileNotFound(f"Failed to load {path}: {str(e)}")
 
-        if not loaded_paths:
-            self._display.display("AUTOLOAD: no group_vars/all.yaml found above playbook")
+        # делаем переменные глобальными через ansible_facts
+        result['ansible_facts'] = combined_vars
+        result['loaded_group_vars'] = loaded
+        result['changed'] = False
+        return result
