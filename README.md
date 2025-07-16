@@ -28,15 +28,18 @@ Fully automatic variable loading using ***only the plugin itself***.
 ```plaintext
 project
 ├──inventories/
-│       | project1/
-│       ├── group_vars/
-│       └── project1_specific.yaml
-│       └── envs/dev/inventory.yaml
-│       project2/
-│       ├── group_vars/
-│       └── project2_specific.yaml
-│       └── prod/inventory.yaml
-│       └── prod/group_vars/sample_vars.yaml
+│       └── project1/
+│           ├── group_vars/
+│           │   └── project1_specific.yaml
+│           └── dev/
+│                 └── inventory.yaml
+│                 └── group_vars/sample_vars.yaml
+│       └── project2/
+│           ├── group_vars/
+│           │    └── project2_specific.yaml
+│           └── prod
+│               └── inventory.yaml
+│               └── group_vars/sample_vars.yaml
 │__play.yaml
 ```
 
