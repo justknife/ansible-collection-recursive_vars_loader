@@ -1,34 +1,48 @@
 # 🔁 Ansible Inventory Plugin: `autovars`
 
-Плагин `autovars` — это кастомный inventory-плагин Ansible, который:
+## Quick start
+```shell
+ansible-galaxy collection install justknife.recursive_vars
+```
 
-- автоматически ищет `group_vars/all.yaml` вверх по дереву (до 3 уровней)
-- загружает переменные из него
-- назначает их вымышленному хосту `localhost` с локальным подключением
+
+The `autovars` plugin is a custom Ansible inventory plugin that:
+
+- Automatically searches for group_vars/all.yaml up to 3 levels up the directory tree
+- Loads variables from that file
+- Assigns them to a dummy host localhost with local connection
 - не требует задач, ролей, `include_vars` или `vars_files`
+
+Requires no tasks, roles, include_vars, or vars_files
+
+Fully automatic variable loading using only the plugin itself.
+
+
 
 Полностью автоматическая подгрузка переменных **только силами плагина**.
 
 ---
 
-## 📦 Структура проекта
+## 📦 Project structure 
 
 ```plaintext
 project/
 ├── ansible.cfg
 ├── plugins/
 │   └── inventory/
-│       └── autovars.py         # <- этот плагин
+│       └── autovars.py         # <- the plugin
 ├── group_vars/
-│   └── all.yaml                # <- переменные, которые будут подгружены
-├── inventory.yaml              # <- inventory, ссылающийся на плагин
+│   └── all.yaml                # <- variables to be loaded
+├── inventory.yaml              # <- inventory referencing the plugin
 └── playbook.yml
+
 ```
 
-⚙️ Установка
-Помести autovars.py в plugins/inventory/
+## Installation
+Place autovars.py in plugins/inventory/.
 
-Укажи путь к плагинам в ansible.cfg:
+
+Set the plugin path in ansible.cfg:
 
 ```
 [defaults]
