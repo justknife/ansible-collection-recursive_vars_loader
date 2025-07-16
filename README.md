@@ -1,55 +1,41 @@
-# 🔁 Ansible Callback Plugin: `autoload_vars` + Task-Based Fallback `recursive_vars_loader`
+# 🔁 Ansible Inventory Plugin: `autovars`
 
-Этот репозиторий содержит два подхода для автоматической загрузки `group_vars/all.yaml` из родительских директорий проекта:
+Плагин `autovars` — это кастомный inventory-плагин Ansible, который:
+
+- автоматически ищет `group_vars/all.yaml` вверх по дереву (до 3 уровней)
+- загружает переменные из него
+- назначает их вымышленному хосту `localhost` с локальным подключением
+- не требует задач, ролей, `include_vars` или `vars_files`
+
+Полностью автоматическая подгрузка переменных **только силами плагина**.
 
 ---
 
-## 📦 1. Callback Plugin — `autoload_vars`
+## 📦 Структура проекта
 
-### 🧠 Что делает
-
-Плагин `autoload_vars` автоматически поднимается вверх по директориям (до 3 уровней) от `playbook_dir` и ищет `group_vars/all.yaml`.  
-Если находит — автоматически загружает переменные **до старта playbook**, без необходимости писать `tasks`, `roles` или `include_vars`.
-
-### 📁 Пример структуры
-
-inventories/
-└── nginx/
-└── project1/
+```plaintext
+project/
+├── ansible.cfg
+├── plugins/
+│   └── inventory/
+│       └── autovars.py         # <- этот плагин
 ├── group_vars/
-│ └── all.yaml ← общие переменные
-└── dev/
-├── group_vars/
-│ └── all.yaml ← переменные окружения
-├── inventory
+│   └── all.yaml                # <- переменные, которые будут подгружены
+├── inventory.yaml              # <- inventory, ссылающийся на плагин
+└── playbook.yml
+```
 
+⚙️ Установка
+Помести autovars.py в plugins/inventory/
 
-### ⚙️ Установка
+Укажи путь к плагинам в ansible.cfg:
 
-1. Положи файл `autoload_vars.py` в директорию `plugins/callback/`
-2. В `ansible.cfg` укажи:
-
-```ini
-[defaults]
-callback_plugins = ./plugins/callback
-callbacks_enable = profile_tasks,autoload_vars
-
-
-Никаких действий не требуется — просто запускай playbook как обычно:
-
-bash
+ini
 Копировать
 Редактировать
-ansible-playbook -i inventories/nginx/project1/dev/inventory playbook.yml
 
 
-- name: Load project-level group_vars
-  hosts: all
-  gather_facts: false
+[defaults]
+inventory_plugins = ./plugins/inventory
+inventory = ./inventory.yaml
 
-  tasks:
-    - name: Load recursive group_vars
-      recursive_vars_loader:
-
-    - debug:
-        var: common_var
