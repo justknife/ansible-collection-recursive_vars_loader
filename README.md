@@ -30,12 +30,8 @@ project/
 
 Укажи путь к плагинам в ansible.cfg:
 
-ini
-Копировать
-Редактировать
-
-
+```
 [defaults]
 inventory_plugins = ./plugins/inventory
 inventory = ./inventory.yaml
-
+```
