@@ -15,27 +15,35 @@ The `autovars` plugin is a custom Ansible inventory plugin that:
 
 Requires no tasks, roles, include_vars, or vars_files
 
-Fully automatic variable loading using only the plugin itself.
+Fully automatic variable loading using ***only the plugin itself***.
 
 
 
-Полностью автоматическая подгрузка переменных **только силами плагина**.
+
 
 ---
 
-## 📦 Project structure 
+## 📦 Project structure sample
 
 ```plaintext
-project/
-├── ansible.cfg
-├── plugins/
-│   └── inventory/
-│       └── autovars.py         # <- the plugin
-├── group_vars/
-│   └── all.yaml                # <- variables to be loaded
-├── inventory.yaml              # <- inventory referencing the plugin
-└── playbook.yml
+project
+├──inventories/
+│       | project1/
+│       ├── group_vars/
+│       └── project1_specific.yaml
+│       └── envs/dev/inventory.yaml
+│       project2/
+│       ├── group_vars/
+│       └── project2_specific.yaml
+│       └── prod/inventory.yaml
+│       └── prod/group_vars/sample_vars.yaml
+│__play.yaml
+```
 
+Now u can load recursive group_vars/*.yaml(vars) when running for sample
+
+```shell
+ansible-playbook play.yaml -i inventories/project2/prod/inventory.yaml
 ```
 
 ## Installation
