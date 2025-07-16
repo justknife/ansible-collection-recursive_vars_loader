@@ -50,7 +50,19 @@ ansible-playbook play.yaml -i inventories/project2/prod/inventory.yaml
 ```
 
 ## Installation
-Place autovars.py in plugins/inventory/.
+```shell
+ansible-galaxy collection install justknife.recursive_vars
+```
+then just add into inventory.yaml
+```yaml
+plugin: justknife.recursive_vars.autovars
+```
+
+or if install manually add into project ***autovars.py*** or dir plugins
+then in ansible.cfg put
+```ini
+inventory_plugins = ./plugins/inventory
+```
 
 
 Set the plugin path in ansible.cfg:
