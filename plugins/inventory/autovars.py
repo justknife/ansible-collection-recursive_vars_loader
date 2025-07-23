@@ -34,8 +34,11 @@ class InventoryModule(BaseInventoryPlugin):
         self.inventory.add_host(dummy_host)
         self.inventory.set_variable(dummy_host, 'ansible_connection', 'local')
 
-        found = False
-        for level in range(4):  # current + 3 levels up
+        all_vars = {}
+        any_found = False
+
+        # Загружаем от самого верхнего к нижнему (глубина 3)
+        for level in reversed(range(4)):  # 0 (текущий), 1, 2, 3 уровни вверх
             gv_path = os.path.abspath(
                 os.path.join(basedir, *(['..'] * level), 'group_vars', 'all.yaml')
             )
@@ -45,10 +48,11 @@ class InventoryModule(BaseInventoryPlugin):
                     data = yaml.safe_load(f) or {}
                     if not isinstance(data, dict):
                         raise AnsibleError(f"Expected dict in {gv_path}, got {type(data)}")
-                    for k, v in data.items():
-                        self.inventory.set_variable(dummy_host, k, v)
-                found = True
-                break
+                    all_vars.update(data)
+                any_found = True
 
-        if not found:
+        if not any_found:
             self.display.v("[autovars] No group_vars/all.yaml found.")
+
+        for k, v in all_vars.items():
+            self.inventory.set_variable(dummy_host, k, v)
