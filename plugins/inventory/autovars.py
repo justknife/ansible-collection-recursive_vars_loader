@@ -11,7 +11,7 @@ name: autovars
 plugin_type: inventory
 short_description: Inventory plugin that loads vars from parent group_vars/all.yaml
 description:
-  - Recursively searches for group_vars/all.yaml up to 3 levels above and injects its variables into a dummy host.
+  - Recursively searches for group_vars/all.yaml up to 3 levels above and injects its variables into all parsed hosts.
 options:
   plugin:
     description: The name of the plugin
@@ -30,15 +30,10 @@ class InventoryModule(BaseInventoryPlugin):
         self.inventory = inventory
         basedir = os.path.dirname(path)
 
-        dummy_host = 'localhost'
-        self.inventory.add_host(dummy_host)
-        self.inventory.set_variable(dummy_host, 'ansible_connection', 'local')
-
         all_vars = {}
         any_found = False
 
-        # Загружаем от самого верхнего к нижнему (глубина 3)
-        for level in reversed(range(4)):  # 0 (текущий), 1, 2, 3 уровни вверх
+        for level in reversed(range(4)):
             gv_path = os.path.abspath(
                 os.path.join(basedir, *(['..'] * level), 'group_vars', 'all.yaml')
             )
@@ -54,5 +49,10 @@ class InventoryModule(BaseInventoryPlugin):
         if not any_found:
             self.display.v("[autovars] No group_vars/all.yaml found.")
 
-        for k, v in all_vars.items():
-            self.inventory.set_variable(dummy_host, k, v)
+        hostnames = list(self.inventory.hosts.keys())
+        if not hostnames:
+            raise AnsibleError("[autovars] No hosts found in inventory to inject vars into.")
+
+        for host in hostnames:
+            for k, v in all_vars.items():
+                self.inventory.set_variable(host, k, v)
