@@ -29,13 +29,16 @@ class InventoryModule(BaseInventoryPlugin):
         self.loader = loader
         self.inventory = inventory
         basedir = os.path.dirname(path)
+
         data = loader.load_from_file(path)
         if not isinstance(data, dict):
             raise AnsibleError(f"Expected dict in {path}, got {type(data)}")
+
         for group_name, group_data in data.items():
             if not isinstance(group_data, dict):
                 continue
             self._parse_group_hierarchy(group_name, group_data)
+
         all_vars = {}
         any_found = False
 
@@ -46,10 +49,10 @@ class InventoryModule(BaseInventoryPlugin):
             if os.path.exists(gv_path):
                 self.display.v(f"[autovars] Loading vars from {gv_path}")
                 with open(gv_path, 'r', encoding='utf-8') as f:
-                    data = yaml.safe_load(f) or {}
-                    if not isinstance(data, dict):
-                        raise AnsibleError(f"Expected dict in {gv_path}, got {type(data)}")
-                    all_vars.update(data)
+                    group_vars_data = yaml.safe_load(f) or {}
+                    if not isinstance(group_vars_data, dict):
+                        raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
+                    all_vars.update(group_vars_data)
                 any_found = True
 
         if not any_found:
@@ -62,3 +65,17 @@ class InventoryModule(BaseInventoryPlugin):
         for host in hostnames:
             for k, v in all_vars.items():
                 self.inventory.set_variable(host, k, v)
+
+    def _parse_group_hierarchy(self, group_name, group_data):
+        self.inventory.add_group(group_name)
+
+        for host in group_data.get("hosts", {}):
+            self.inventory.add_host(host, group=group_name)
+
+        for child_name, child_data in group_data.get("children", {}).items():
+            self._parse_group_hierarchy(child_name, child_data)
+
+        vars_dict = group_data.get("vars", {})
+        if vars_dict:
+            for k, v in vars_dict.items():
+                self.inventory.set_variable(group_name, k, v)
