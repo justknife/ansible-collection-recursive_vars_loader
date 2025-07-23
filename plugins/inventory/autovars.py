@@ -29,7 +29,13 @@ class InventoryModule(BaseInventoryPlugin):
         self.loader = loader
         self.inventory = inventory
         basedir = os.path.dirname(path)
-
+        data = loader.load_from_file(path)
+        if not isinstance(data, dict):
+            raise AnsibleError(f"Expected dict in {path}, got {type(data)}")
+        for group_name, group_data in data.items():
+            if not isinstance(group_data, dict):
+                continue
+            self._parse_group_hierarchy(group_name, group_data)
         all_vars = {}
         any_found = False
 
