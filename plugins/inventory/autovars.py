@@ -69,11 +69,16 @@ class InventoryModule(BaseInventoryPlugin):
     def _parse_group_hierarchy(self, group_name, group_data):
         self.inventory.add_group(group_name)
 
-        for host in group_data.get("hosts", {}):
+        hosts_dict = group_data.get("hosts", {})
+        for host, host_data in hosts_dict.items():
             self.inventory.add_host(host, group=group_name)
+            if isinstance(host_data, dict):
+                for var_key, var_value in host_data.items():
+                    self.inventory.set_variable(host, var_key, var_value)
 
         for child_name, child_data in group_data.get("children", {}).items():
             self._parse_group_hierarchy(child_name, child_data)
+            self.inventory.add_child(group_name, child_name)
 
         vars_dict = group_data.get("vars", {})
         if vars_dict:
