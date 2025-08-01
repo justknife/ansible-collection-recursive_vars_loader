@@ -9,14 +9,23 @@ from ansible.errors import AnsibleError
 DOCUMENTATION = r'''
 name: autovars
 plugin_type: inventory
-short_description: Inventory plugin that loads vars from parent group_vars/all.yaml
+short_description: Inventory plugin that loads vars from nearby group_vars YAML files
 description:
-  - Recursively searches for group_vars/all.yaml up to 3 levels above and injects its variables into all parsed hosts.
+  - Recursively searches for group_vars/*.yaml up to the inventories root or project root.
+    Only allowed file names (without extension) will be processed.
 options:
   plugin:
     description: The name of the plugin
     required: true
     choices: ['autovars']
+  allowed_group_files:
+    description: >
+      List of allowed base names (without .yaml) in group_vars that will be loaded.
+      Example: ['all', 'main', 'project1']
+    required: false
+    type: list
+    elements: str
+    default: ['all', 'main']
 '''
 
 class InventoryModule(BaseInventoryPlugin):
@@ -39,24 +48,50 @@ class InventoryModule(BaseInventoryPlugin):
                 continue
             self._parse_group_hierarchy(group_name, group_data)
 
-        project_root = os.path.abspath(os.getcwd())  # предполагаем, что ansible запускается из корня проекта
-        current_dir = basedir
         all_vars = {}
         any_found = False
+        project_root = os.path.abspath(os.getcwd())
+        current_dir = basedir
+
+        # try to determine project name from path inside "inventories/project/..."
+        inventory_parts = os.path.normpath(path).split(os.sep)
+        try:
+            project_name_index = inventory_parts.index("inventories") + 1
+            project_name = inventory_parts[project_name_index]
+        except (ValueError, IndexError):
+            project_name = None
+
+        # load allowed file names
+        allowed_names = self.get_option('allowed_group_files') or ['all', 'main']
+        if project_name:
+            allowed_names.append(project_name)
 
         while True:
-            gv_path = os.path.join(current_dir, 'group_vars', 'all.yaml')
-            if os.path.exists(gv_path):
-                self.display.v(f"[autovars] Loading vars from {gv_path}")
-                with open(gv_path, 'r', encoding='utf-8') as f:
-                    group_vars_data = yaml.safe_load(f) or {}
-                    if not isinstance(group_vars_data, dict):
-                        raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
-                    all_vars.update(group_vars_data)
-                    any_found = True
+            group_vars_dir = os.path.join(current_dir, "group_vars")
+            if os.path.isdir(group_vars_dir):
+                for fname in os.listdir(group_vars_dir):
+                    if not fname.endswith((".yaml", ".yml")):
+                        continue
 
-            # стоп, если достигли inventories или вышли за пределы корня
-            if os.path.basename(current_dir) == 'inventories':
+                    name = os.path.splitext(fname)[0]
+                    if name not in allowed_names:
+                        self.display.v(f"[autovars] Skipping unrelated group_vars file: {fname}")
+                        continue
+
+                    gv_path = os.path.join(group_vars_dir, fname)
+                    self.display.v(f"[autovars] Loading vars from {gv_path}")
+                    with open(gv_path, 'r', encoding='utf-8') as f:
+                        group_vars_data = yaml.safe_load(f) or {}
+                        if not isinstance(group_vars_data, dict):
+                            raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
+
+                        for k, v in group_vars_data.items():
+                            if k in all_vars:
+                                self.display.v(f"[autovars] Overriding {k}: {all_vars[k]} -> {v}")
+                            all_vars[k] = v
+                        any_found = True
+
+            if os.path.basename(current_dir) == "inventories":
                 break
             if not os.path.commonpath([current_dir, project_root]) == project_root:
                 self.display.v(f"[autovars] Reached outside project root: {project_root}. Stopping.")
@@ -65,11 +100,10 @@ class InventoryModule(BaseInventoryPlugin):
             parent_dir = os.path.dirname(current_dir)
             if parent_dir == current_dir:
                 break
-
             current_dir = parent_dir
 
         if not any_found:
-            self.display.v("[autovars] No group_vars/all.yaml found.")
+            self.display.v("[autovars] No group_vars/*.yaml files loaded.")
 
         hostnames = list(self.inventory.hosts.keys())
         if not hostnames:
