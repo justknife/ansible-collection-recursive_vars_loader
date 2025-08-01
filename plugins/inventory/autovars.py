@@ -3,6 +3,7 @@ __metaclass__ = type
 
 import os
 import yaml
+
 from ansible.plugins.inventory import BaseInventoryPlugin
 from ansible.errors import AnsibleError
 
@@ -26,6 +27,12 @@ options:
     type: list
     elements: str
     default: ['all', 'main']
+  project_name:
+    description: >
+      Optional override of project name to use when deciding which group_vars files to load.
+      If not specified, it will be inferred as the second directory under "inventories".
+    required: false
+    type: str
 '''
 
 class InventoryModule(BaseInventoryPlugin):
@@ -39,11 +46,35 @@ class InventoryModule(BaseInventoryPlugin):
         self.inventory = inventory
         basedir = os.path.dirname(path)
 
-        data = loader.load_from_file(path)
-        if not isinstance(data, dict):
-            raise AnsibleError(f"Expected dict in {path}, got {type(data)}")
+        # load inventory file for manual param parsing
+        config_data = loader.load_from_file(path) or {}
 
-        for group_name, group_data in data.items():
+        configured_project_name = config_data.get("project_name")
+        configured_names = config_data.get("allowed_group_files", ["all", "main"])
+        allowed_names = set(n.lower() for n in configured_names)
+
+        # infer project name from inventory path
+        inventory_parts = os.path.normpath(path).split(os.sep)
+        try:
+            inventories_index = inventory_parts.index("inventories")
+            inferred_project_name = inventory_parts[inventories_index + 2]
+        except (ValueError, IndexError):
+            inferred_project_name = None
+
+        project_name = (configured_project_name or inferred_project_name)
+        if project_name:
+            allowed_names.add(project_name.lower())
+
+        self.display.v(f"[autovars] Project name: {project_name}")
+        self.display.v(f"[autovars] Allowed group_var base names: {sorted(allowed_names)}")
+
+        # parse inventory structure
+        if not isinstance(config_data, dict):
+            raise AnsibleError(f"Expected dict in {path}, got {type(config_data)}")
+
+        for group_name, group_data in config_data.items():
+            if group_name in ("plugin", "allowed_group_files", "project_name"):
+                continue
             if not isinstance(group_data, dict):
                 continue
             self._parse_group_hierarchy(group_name, group_data)
@@ -53,43 +84,36 @@ class InventoryModule(BaseInventoryPlugin):
         project_root = os.path.abspath(os.getcwd())
         current_dir = basedir
 
-        # try to determine project name from path inside "inventories/project/..."
-        inventory_parts = os.path.normpath(path).split(os.sep)
-        try:
-            project_name_index = inventory_parts.index("inventories") + 1
-            project_name = inventory_parts[project_name_index]
-        except (ValueError, IndexError):
-            project_name = None
-
-        # load allowed file names
-        allowed_names = self.get_option('allowed_group_files') or ['all', 'main']
-        if project_name:
-            allowed_names.append(project_name)
-
         while True:
             group_vars_dir = os.path.join(current_dir, "group_vars")
+            self.display.v(f"[autovars] Scanning: {group_vars_dir}")
+
             if os.path.isdir(group_vars_dir):
                 for fname in os.listdir(group_vars_dir):
-                    if not fname.endswith((".yaml", ".yml")):
+                    basename, ext = os.path.splitext(fname)
+                    if ext.lower() not in ('.yaml', '.yml'):
+                        self.display.v(f"[autovars] Ignoring {fname} (unsupported extension)")
                         continue
 
-                    name = os.path.splitext(fname)[0]
-                    if name not in allowed_names:
-                        self.display.v(f"[autovars] Skipping unrelated group_vars file: {fname}")
+                    if basename.lower() not in allowed_names:
+                        self.display.v(f"[autovars] Skipping {fname} — not in allowed list")
                         continue
 
                     gv_path = os.path.join(group_vars_dir, fname)
                     self.display.v(f"[autovars] Loading vars from {gv_path}")
-                    with open(gv_path, 'r', encoding='utf-8') as f:
-                        group_vars_data = yaml.safe_load(f) or {}
-                        if not isinstance(group_vars_data, dict):
-                            raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
+                    try:
+                        with open(gv_path, 'r', encoding='utf-8') as f:
+                            group_vars_data = yaml.safe_load(f) or {}
+                            if not isinstance(group_vars_data, dict):
+                                raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
 
-                        for k, v in group_vars_data.items():
-                            if k in all_vars:
-                                self.display.v(f"[autovars] Overriding {k}: {all_vars[k]} -> {v}")
-                            all_vars[k] = v
-                        any_found = True
+                            for k, v in group_vars_data.items():
+                                if k in all_vars:
+                                    self.display.v(f"[autovars] Overriding {k}: {all_vars[k]} -> {v}")
+                                all_vars[k] = v
+                            any_found = True
+                    except Exception as e:
+                        raise AnsibleError(f"[autovars] Failed to load {gv_path}: {e}")
 
             if os.path.basename(current_dir) == "inventories":
                 break

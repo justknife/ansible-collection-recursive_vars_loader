@@ -1,6 +1,6 @@
 namespace: justknife
 name: recursive_vars
-version: 0.1.2
+version: 0.1.3
 readme: README.md
 repository: https://github.com/justknife/ansible-collection-recursive_vars_loader
 authors:
