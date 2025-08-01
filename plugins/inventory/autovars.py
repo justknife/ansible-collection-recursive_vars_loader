@@ -39,13 +39,13 @@ class InventoryModule(BaseInventoryPlugin):
                 continue
             self._parse_group_hierarchy(group_name, group_data)
 
+        project_root = os.path.abspath(os.getcwd())  # предполагаем, что ansible запускается из корня проекта
+        current_dir = basedir
         all_vars = {}
         any_found = False
 
-        for level in reversed(range(4)):
-            gv_path = os.path.abspath(
-                os.path.join(basedir, *(['..'] * level), 'group_vars', 'all.yaml')
-            )
+        while True:
+            gv_path = os.path.join(current_dir, 'group_vars', 'all.yaml')
             if os.path.exists(gv_path):
                 self.display.v(f"[autovars] Loading vars from {gv_path}")
                 with open(gv_path, 'r', encoding='utf-8') as f:
@@ -53,7 +53,20 @@ class InventoryModule(BaseInventoryPlugin):
                     if not isinstance(group_vars_data, dict):
                         raise AnsibleError(f"Expected dict in {gv_path}, got {type(group_vars_data)}")
                     all_vars.update(group_vars_data)
-                any_found = True
+                    any_found = True
+
+            # стоп, если достигли inventories или вышли за пределы корня
+            if os.path.basename(current_dir) == 'inventories':
+                break
+            if not os.path.commonpath([current_dir, project_root]) == project_root:
+                self.display.v(f"[autovars] Reached outside project root: {project_root}. Stopping.")
+                break
+
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:
+                break
+
+            current_dir = parent_dir
 
         if not any_found:
             self.display.v("[autovars] No group_vars/all.yaml found.")
